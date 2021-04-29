@@ -613,6 +613,33 @@ describe('VALIDATE FUNCTION TESTS ', function () {
         done();
       });
     });
+
+    it('Should ignore mismatches for nested objects in parameters', function (done) {
+      let nestedObjectParamsSpec = fs.readFileSync(path.join(__dirname, VALIDATION_DATA_FOLDER_PATH +
+        '/nestedObjectParamsSpec.yaml'), 'utf-8'),
+        nestedObjectParamsCollection = fs.readFileSync(path.join(__dirname, VALIDATION_DATA_FOLDER_PATH +
+          '/nestedObjectParamsCollection.json'), 'utf-8'),
+        resultObj,
+        historyRequest = [],
+        options = {
+          showMissingInSchemaErrors: true,
+          strictRequestMatching: true,
+          ignoreUnresolvedVariables: true,
+          suggestAvailableFixes: true
+        },
+        schemaPack = new Converter.SchemaPack({ type: 'string', data: nestedObjectParamsSpec }, options);
+
+      getAllTransactions(JSON.parse(nestedObjectParamsCollection), historyRequest);
+
+      schemaPack.validateTransaction(historyRequest, (err, result) => {
+        expect(err).to.be.null;
+        expect(result).to.be.an('object');
+
+        resultObj = result.requests[historyRequest[0].id].endpoints[0];
+        expect(resultObj.mismatches).to.have.lengthOf(0);
+        done();
+      });
+    });
   });
 
   describe('getPostmanUrlSuffixSchemaScore function', function () {
@@ -666,6 +693,44 @@ describe('VALIDATE FUNCTION TESTS ', function () {
       expect(resultObj.mismatches[2].transactionJsonPath).to.eql('$.request.body.urlencoded[4].value');
       expect(resultObj.mismatches[2].suggestedFix.actualValue).to.eql('999');
       expect(resultObj.mismatches[2].suggestedFix.suggestedValue).to.eql('exampleString');
+      done();
+    });
+  });
+
+  describe('findMatchingRequestFromSchema function', function () {
+    it('#GITHUB-9396 Should maintain correct order of matched endpoint', function (done) {
+      let schema = {
+          paths: {
+            '/lookups': {
+              'get': { 'summary': 'Lookup Job Values' }
+            },
+            '/{jobid}': {
+              'get': {
+                'summary': 'Get Job by ID',
+                'parameters': [
+                  {
+                    'in': 'path',
+                    'name': 'jobid',
+                    'schema': {
+                      'type': 'string'
+                    },
+                    'required': true,
+                    'description': 'Unique identifier for a job to retrieve.',
+                    'example': '{{jobid}}'
+                  }
+                ]
+              }
+            }
+          }
+        },
+        schemaPath = '{{baseUrl}}/{{jobid}}',
+        result;
+
+      result = schemaUtils.findMatchingRequestFromSchema('GET', schemaPath, schema, { strictRequestMatching: true });
+
+      expect(result).to.have.lengthOf(2);
+      expect(result[0].name).to.eql('GET /{jobid}');
+      expect(result[1].name).to.eql('GET /lookups');
       done();
     });
   });
